@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ovqat g'ildiragi</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #f4f3ee;
+    color: #2c2c2a;
+    margin: 0;
+    padding: 2rem 1rem;
+    display: flex;
+    justify-content: center;
+  }
+  .app {
+    width: 100%;
+    max-width: 420px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    text-align: center;
+    margin: 0 0 1.5rem;
+  }
+  #filters { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom: 1.5rem; }
+  #filters button {
+    font-family: inherit;
+    padding: 6px 14px;
+    font-size: 13px;
+    border-radius: 999px;
+    cursor: pointer;
+    background: #fff;
+    transition: all .15s ease;
+  }
+  .wheel-wrap { position:relative; width:280px; height:280px; margin: 0 auto; }
+  .pointer {
+    position:absolute; top:-4px; left:50%; transform:translateX(-50%); z-index:2;
+    width:0; height:0;
+    border-left:10px solid transparent;
+    border-right:10px solid transparent;
+    border-top:16px solid #2c2c2a;
+  }
+  #wheel-svg {
+    width:280px; height:280px;
+    transition: transform 3.5s cubic-bezier(0.15,0.85,0.25,1);
+    transform: rotate(0deg);
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.12));
+  }
+  .hub {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:56px; height:56px; border-radius:50%;
+    background:#fff; border:1px solid #d3d1c7;
+    display:flex; align-items:center; justify-content:center; z-index:2;
+  }
+  .hub i { font-size: 22px; color: #5f5e5a; }
+  .actions { text-align:center; margin-top: 1.5rem; }
+  button {
+    font-family: inherit;
+    border: 1px solid #d3d1c7;
+    background: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  button:hover { background: #f1efe8; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #spin-btn { padding: 10px 28px; font-size: 15px; }
+  #result-card {
+    display:none; margin-top: 1.5rem;
+    background: #fff; border-radius: 12px; border: 1px solid #d3d1c7;
+    padding: 1.25rem; text-align:center;
+  }
+  #result-card p.label { font-size:13px; color:#5f5e5a; margin:0 0 4px; }
+  #result-name { font-size:22px; font-weight:600; margin: 0 0 12px; }
+  .result-actions { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .result-actions button { padding: 8px 16px; font-size: 13px; }
+  footer { text-align:center; margin-top: 2rem; font-size: 12px; color: #888780; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Bugun nima yeymiz?</h1>
+
+  <div id="filters"></div>
+
+  <div class="wheel-wrap">
+    <div class="pointer"></div>
+    <svg id="wheel-svg" viewBox="0 0 280 280"></svg>
+    <div class="hub"><i class="ti ti-tools-kitchen-2"></i></div>
+  </div>
+
+  <div class="actions">
+    <button id="spin-btn"><i class="ti ti-player-play" style="margin-right:6px"></i>Aylantir</button>
+  </div>
+
+  <div id="result-card">
+    <p class="label">Bugungi tanlov</p>
+    <p id="result-name"></p>
+    <div class="result-actions">
+      <button id="recipe-btn"><i class="ti ti-book" style="margin-right:5px"></i>Retsept qidirish</button>
+      <button id="respin-btn"><i class="ti ti-refresh" style="margin-right:5px"></i>Qayta aylantir</button>
+    </div>
+  </div>
+
+  <footer>Kategoriyalarni tanlang va g'ildirakni aylantiring</footer>
+</div>
+
+<script>
+const categories = {
+  milliy: { label: "Milliy taom", color: "#D85A30", dishes: ["Osh","Lag'mon","Manti","Somsa","Norin","Chuchvara","Dimlama","Shorva"] },
+  fastfood: { label: "Fast food", color: "#378ADD", dishes: ["Burger","Pitsa","Hot-dog","Shaurma","Kartoshka fri"] },
+  osiyo: { label: "Osiyo taomlari", color: "#639922", dishes: ["Sushi","Wok","Pad thai","Ramen","Dim sum"] },
+  shirinlik: { label: "Shirinlik", color: "#D4537E", dishes: ["Napoleon","Bal muzqaymoq","Vaflya tort","Blinchik"] }
+};
+
+let activeFilters = new Set(Object.keys(categories));
+const filtersEl = document.getElementById('filters');
+const svg = document.getElementById('wheel-svg');
+const spinBtn = document.getElementById('spin-btn');
+const respinBtn = document.getElementById('respin-btn');
+const recipeBtn = document.getElementById('recipe-btn');
+const resultCard = document.getElementById('result-card');
+const resultName = document.getElementById('result-name');
+
+let currentRotation = 0;
+let currentDishes = [];
+let chosen = null;
+
+function renderFilters() {
+  filtersEl.innerHTML = '';
+  Object.entries(categories).forEach(([key, cat]) => {
+    const active = activeFilters.has(key);
+    const chip = document.createElement('button');
+    chip.textContent = cat.label;
+    chip.style.border = `1px solid ${active ? cat.color : '#d3d1c7'}`;
+    chip.style.background = active ? cat.color + '22' : '#fff';
+    chip.style.color = active ? cat.color : '#5f5e5a';
+    chip.addEventListener('click', () => {
+      if (activeFilters.has(key)) {
+        if (activeFilters.size > 1) activeFilters.delete(key);
+      } else {
+        activeFilters.add(key);
+      }
+      renderFilters();
+      buildWheel();
+    });
+    filtersEl.appendChild(chip);
+  });
+}
+
+function buildWheel() {
+  let pool = [];
+  activeFilters.forEach(key => {
+    categories[key].dishes.forEach(d => pool.push({ name: d, color: categories[key].color }));
+  });
+  const maxSlices = 10;
+  if (pool.length > maxSlices) {
+    pool = pool.sort(() => 0.5 - Math.random()).slice(0, maxSlices);
+  }
+  currentDishes = pool;
+  const n = pool.length;
+  const cx = 140, cy = 140, r = 138;
+  const slice = 360 / n;
+  let svgContent = '';
+  pool.forEach((item, i) => {
+    const startAngle = i * slice - 90;
+    const endAngle = startAngle + slice;
+    const x1 = cx + r * Math.cos(startAngle * Math.PI / 180);
+    const y1 = cy + r * Math.sin(startAngle * Math.PI / 180);
+    const x2 = cx + r * Math.cos(endAngle * Math.PI / 180);
+    const y2 = cy + r * Math.sin(endAngle * Math.PI / 180);
+    const largeArc = slice > 180 ? 1 : 0;
+    svgContent += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${item.color}" fill-opacity="0.85" stroke="#fff" stroke-width="1.5"/>`;
+    const midAngle = startAngle + slice / 2;
+    const tx = cx + (r * 0.62) * Math.cos(midAngle * Math.PI / 180);
+    const ty = cy + (r * 0.62) * Math.sin(midAngle * Math.PI / 180);
+    svgContent += `<text x="${tx.toFixed(2)}" y="${ty.toFixed(2)}" font-size="11" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="middle" transform="rotate(${midAngle + 90}, ${tx.toFixed(2)}, ${ty.toFixed(2)})">${item.name}</text>`;
+  });
+  svg.innerHTML = svgContent;
+}
+
+spinBtn.addEventListener('click', () => spinWheel());
+respinBtn.addEventListener('click', () => { resultCard.style.display = 'none'; spinWheel(); });
+
+function spinWheel() {
+  if (currentDishes.length === 0) return;
+  spinBtn.disabled = true;
+  const n = currentDishes.length;
+  const slice = 360 / n;
+  const targetIndex = Math.floor(Math.random() * n);
+  const targetSliceCenter = targetIndex * slice + slice / 2;
+  const extraSpins = 5 * 360;
+  const finalRotation = currentRotation + extraSpins + (360 - targetSliceCenter) - (currentRotation % 360);
+  currentRotation = finalRotation;
+  svg.style.transform = `rotate(${finalRotation}deg)`;
+  setTimeout(() => {
+    chosen = currentDishes[targetIndex].name;
+    resultName.textContent = chosen;
+    resultCard.style.display = 'block';
+    spinBtn.disabled = false;
+  }, 3600);
+}
+
+recipeBtn.addEventListener('click', () => {
+  if (chosen) {
+    window.open('https://www.google.com/search?q=' + encodeURIComponent(chosen + ' retsepti'), '_blank');
+  }
+});
+
+renderFilters();
+buildWheel();
+</script>
+</body>
+</html>
